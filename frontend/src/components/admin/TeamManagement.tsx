@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Users, Plus, Trash2, Mail, Shield, User, RefreshCw, X, Clock, Target, ShieldCheck, Activity } from 'lucide-react';
+import { Users, Plus, Trash2, Mail, Shield, User, RefreshCw, X, Clock, Target, ShieldCheck, Activity, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { createAdminTeam, deleteAdminTeam, deleteAllAdminTeams, swapAdminTeamRound } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, resolveImageUrl } from '@/lib/utils';
 import { useAdminToast } from '@/contexts/AdminToastContext';
 
 interface TeamManagementProps {
@@ -20,21 +20,62 @@ export function TeamManagement({ token, teams, onRefresh, onError }: TeamManagem
   const [teamEmail, setTeamEmail] = useState('');
   const [teamSolverName, setTeamSolverName] = useState('');
   const [teamRunnerName, setTeamRunnerName] = useState('');
+  const [teamRunnerAvatar, setTeamRunnerAvatar] = useState('');
   const [teamPassword, setTeamPassword] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isSwapping, setIsSwapping] = useState<string | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<any | null>(null);
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxSize = 128;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxSize) {
+            height *= maxSize / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width *= maxSize / height;
+            height = maxSize;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setTeamRunnerAvatar(dataUrl);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleCreateTeam = async () => {
     if (!token || !teamName || !teamEmail || !teamPassword) return;
     setIsCreating(true);
     onError(null);
     try {
-      await createAdminTeam(token, { name: teamName, email: teamEmail, password: teamPassword, solverName: teamSolverName, runnerName: teamRunnerName });
+      await createAdminTeam(token, { name: teamName, email: teamEmail, password: teamPassword, solverName: teamSolverName, runnerName: teamRunnerName, runnerAvatar: teamRunnerAvatar });
       setTeamName('');
       setTeamEmail('');
       setTeamSolverName('');
       setTeamRunnerName('');
+      setTeamRunnerAvatar('');
       setTeamPassword('');
       showToast('Team created successfully');
       onRefresh();
@@ -157,6 +198,20 @@ export function TeamManagement({ token, teams, onRefresh, onError }: TeamManagem
               </div>
 
               <div className="space-y-2">
+                <label className="text-[8px] uppercase tracking-[0.3em] text-white/80 ml-1">Runner Avatar</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40" />
+                    <Input placeholder="IMAGE URL OR UPLOAD" value={teamRunnerAvatar} onChange={e => setTeamRunnerAvatar(e.target.value)} className="bg-white/[0.03] border-white/5 pl-9 text-[10px] uppercase tracking-widest h-11" />
+                  </div>
+                  <div className="relative w-11 h-11 bg-white/[0.03] border border-white/5 flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer">
+                    <Upload className="w-4 h-4 text-white/60" />
+                    <input type="file" accept="image/*" onChange={handleAvatarUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-[8px] uppercase tracking-[0.3em] text-white/80 ml-1">Secure_Passkey</label>
                 <div className="relative">
                   <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40" />
@@ -223,6 +278,11 @@ export function TeamManagement({ token, teams, onRefresh, onError }: TeamManagem
                     {team.solverName && <span className="text-[8px] font-mono bg-blue-500/10 text-blue-400 px-1.5 py-0.5 border border-blue-500/20">S: {team.solverName.toUpperCase()}</span>}
                     {team.runnerName && <span className="text-[8px] font-mono bg-[var(--color-accent)]/10 text-[var(--color-accent)] px-1.5 py-0.5 border border-[var(--color-accent)]/20">R: {team.runnerName.toUpperCase()}</span>}
                   </div>
+                  {team.runnerAvatar && (
+                    <div className="mt-2">
+                      <img src={resolveImageUrl(team.runnerAvatar)} alt="Runner Avatar" className="w-8 h-8 rounded-full border border-[var(--color-accent)]/30 object-cover" />
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center text-[8px] font-mono uppercase tracking-widest text-white/70">
@@ -315,7 +375,12 @@ export function TeamManagement({ token, teams, onRefresh, onError }: TeamManagem
                       <div className="text-[8px] font-mono text-[var(--color-accent)]/60 uppercase tracking-widest mb-2 flex items-center gap-2">
                         <Activity className="w-3 h-3" /> Runner
                       </div>
-                      <div className="font-bold uppercase tracking-widest text-sm">{selectedTeam.runnerName || 'UNASSIGNED'}</div>
+                      <div className="flex items-center gap-3">
+                        {selectedTeam.runnerAvatar && (
+                           <img src={resolveImageUrl(selectedTeam.runnerAvatar)} alt="Runner" className="w-10 h-10 rounded-full border border-[var(--color-accent)]/30 object-cover" />
+                        )}
+                        <div className="font-bold uppercase tracking-widest text-sm">{selectedTeam.runnerName || 'UNASSIGNED'}</div>
+                      </div>
                     </div>
                   </div>
                 </section>

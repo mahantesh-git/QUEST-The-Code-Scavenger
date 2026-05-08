@@ -7,7 +7,7 @@ export interface HandoffDetails {
   passkey: string;
   lat: string;
   lng: string;
-  volunteer: string;
+
   place: string;
 }
 
@@ -57,6 +57,7 @@ export interface TeamDocument {
   lastLoginAt?: Date;
   swappedRounds?: Record<string, string>;
   swapsUsed?: number;
+  runnerAvatar?: string;
   // Device lock: tracks which session fingerprint is active per role
   // key = role ('solver'|'runner'), value = session token fingerprint (first 16 chars of JWT)
   activeDevices?: Record<string, string>;
@@ -105,19 +106,14 @@ export interface CoordinateInfo {
   place: string;
 }
 
-export interface VolunteerInfo {
-  name: string;
-  initials: string;
-  bg: string;
-  color: string;
-}
+
 
 export interface QuestionDocument {
   round: number;
   isReserve?: boolean;
   p1: PuzzlePart;
   coord: CoordinateInfo;
-  volunteer: VolunteerInfo;
+
   qrPasskey: string;
   locationQrCode: string;
   cx: number;

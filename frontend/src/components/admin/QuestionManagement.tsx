@@ -47,7 +47,7 @@ function createEmptyQuestion(nextRound: number): RoundQuestion {
     isReserve: false,
     p1: { title: '', code: '', hint: '', ans: '', output: '', language: 'python', testCases: [] },
     coord: { lat: '', lng: '', place: '' },
-    volunteer: { name: '', initials: '', bg: 'bg-[var(--color-accent)]/10', color: 'text-[var(--color-accent)]' },
+
     qrPasskey: '',
     locationQrCode: '',
     cx: 0.5,

@@ -260,12 +260,7 @@ export interface RoundQuestion {
     lng: string;
     place: string;
   };
-  volunteer: {
-    name: string;
-    initials: string;
-    bg: string;
-    color: string;
-  };
+
   qrPasskey: string;
   locationQrCode?: string;
   cx: number;
@@ -309,6 +304,7 @@ export async function getAdminTeams(token: string) {
       email: string;
       solverName: string;
       runnerName: string;
+      runnerAvatar?: string;
       createdAt: string;
       lastLoginAt: string | null;
       score: number;
@@ -318,7 +314,7 @@ export async function getAdminTeams(token: string) {
   }>('/admin/teams', { method: 'GET' }, token);
 }
 
-export async function createAdminTeam(token: string, payload: { name: string; email: string; password: string; solverName?: string; runnerName?: string }) {
+export async function createAdminTeam(token: string, payload: { name: string; email: string; password: string; solverName?: string; runnerName?: string; runnerAvatar?: string }) {
   return requestJson<{ ok: boolean }>('/admin/teams', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -371,6 +367,7 @@ export async function wipeAdminDatabase(token: string) {
 export interface LeaderboardTeam {
   id: string;
   name: string;
+  runnerAvatar?: string;
   round: number;
   solvedCount: number;
   stage: string;

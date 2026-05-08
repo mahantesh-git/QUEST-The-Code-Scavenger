@@ -99,7 +99,7 @@ function createQuestionPayload(input: any, existing?: Partial<QuestionDocument>)
   const locationQrCodeInput = typeof input?.locationQrCode === 'string' ? input.locationQrCode.trim() : '';
   const p1 = input?.p1 || {};
   const coord = input?.coord || {};
-  const volunteer = input?.volunteer || {};
+
   const cx = Number(input?.cx ?? existing?.cx ?? 0.5);
   const cy = Number(input?.cy ?? existing?.cy ?? 0.5);
 
@@ -137,12 +137,7 @@ function createQuestionPayload(input: any, existing?: Partial<QuestionDocument>)
       lng: typeof coord.lng === 'string' ? coord.lng : '',
       place: typeof coord.place === 'string' ? coord.place : '',
     },
-    volunteer: {
-      name: typeof volunteer.name === 'string' ? volunteer.name : '',
-      initials: typeof volunteer.initials === 'string' ? volunteer.initials : '',
-      bg: typeof volunteer.bg === 'string' ? volunteer.bg : '',
-      color: typeof volunteer.color === 'string' ? volunteer.color : '',
-    },
+
     qrPasskey,
     locationQrCode: locationQrCodeInput || existing?.locationQrCode || buildLocationQrCode(round),
     cx: Number.isFinite(cx) ? cx : 0.5,
@@ -160,7 +155,9 @@ function getAdminPassword() {
 
 async function getRoundCount() {
   const questions = await getQuestionsCollection();
-  const count = await questions.countDocuments();
+  // Exclude reserve questions — they live in reserve_pool but if accidentally
+  // stored here they must not inflate the round count.
+  const count = await questions.countDocuments({ isReserve: { $ne: true } });
   return Math.max(1, count);
 }
 
@@ -376,10 +373,13 @@ async function augmentGameState(teamId: string, baseState: GameState) {
 
   const activeQuestionOverride = currentQ ? {
     id: currentQ._id.toString(),
-    round: currentQ.round,
+    // Always derive round from gameState, never from the question document.
+    // Reserve pool questions have out-of-range round values (11–18) that would
+    // corrupt the frontend display if leaked.
+    round: baseState.round + 1,
     p1: { title: currentQ.p1?.title, hint: currentQ.p1?.hint, language: currentQ.p1?.language, code: currentQ.p1?.code },
     coord: currentQ.coord,
-    volunteer: currentQ.volunteer,
+
     qrPasskey: currentQ.qrPasskey
   } : null;
 
@@ -1009,7 +1009,7 @@ app.post('/api/team/request-help', requireAuth, requireGameActive, route(async (
   }
 
   const questions = await getQuestionsCollection();
-  const roundCount = await questions.countDocuments({});
+  const roundCount = await questions.countDocuments({ isReserve: { $ne: true } });
   const gameState = normalizeGameState(team.gameState, roundCount);
   const roundDisplay = gameState.round + 1;
 
@@ -1223,13 +1223,13 @@ app.post('/api/runner/complete-round', requireAuth, requireGameActive, route(asy
     const endTime = Date.now();
     elapsedSeconds = (endTime - startTime) / 1000;
 
-    // Time Tiers
+    // Time Tiers (Shifted for 20m Hard Mode Jackpot)
     const elapsedMinutes = elapsedSeconds / 60;
-    if (elapsedMinutes < 10) {
+    if (elapsedMinutes < 20) {
       speedBonus = 500;
-    } else if (elapsedMinutes < 15) {
-      speedBonus = 250;
     } else if (elapsedMinutes < 25) {
+      speedBonus = 250;
+    } else if (elapsedMinutes < 35) {
       speedBonus = 100;
     } else {
       speedBonus = 0;
@@ -1403,6 +1403,7 @@ app.get('/api/leaderboard', route(async (_request, response) => {
     return {
       id: team._id.toString(),
       name: team.name,
+      runnerAvatar: team.runnerAvatar,
       round: team.gameState.round,
       solvedCount,
       score: team.score || 0,
@@ -1687,7 +1688,7 @@ app.delete('/api/admin/phrases/:id', requireAdmin, route(async (request: AdminAu
 }));
 
 app.post('/api/admin/teams', requireAdmin, route(async (request: AdminAuthedRequest, response) => {
-  const { name, email, password, solverName, runnerName } = request.body as { name?: string; email?: string; password?: string; solverName?: string; runnerName?: string };
+  const { name, email, password, solverName, runnerName, runnerAvatar } = request.body as { name?: string; email?: string; password?: string; solverName?: string; runnerName?: string; runnerAvatar?: string };
   if (!name || !password) {
     response.status(400).json({ error: 'name and password are required' });
     return;
@@ -1695,7 +1696,7 @@ app.post('/api/admin/teams', requireAdmin, route(async (request: AdminAuthedRequ
 
   const roundCount = await getRoundCount();
   try {
-    await createTeam(name, password, email?.trim() || undefined, solverName?.trim() || undefined, runnerName?.trim() || undefined, roundCount, false);
+    await createTeam(name, password, email?.trim() || undefined, solverName?.trim() || undefined, runnerName?.trim() || undefined, roundCount, false, runnerAvatar?.trim() || undefined);
   } catch (err: any) {
     response.status(409).json({ error: 'Team already exists' });
     return;
@@ -1724,22 +1725,43 @@ app.delete('/api/admin/teams', requireAdmin, route(async (_request: AdminAuthedR
 
 app.get('/api/admin/questions', requireAdmin, route(async (_request: AdminAuthedRequest, response) => {
   const questions = await getQuestionsCollection();
-  const docs = await questions.find({}).sort({ round: 1 }).toArray();
+  const reservePool = await getReservePoolCollection();
+
+  const [regularDocs, reserveDocs] = await Promise.all([
+    questions.find({}).sort({ round: 1 }).toArray(),
+    reservePool.find({}).sort({ round: 1 }).toArray(),
+  ]);
+
+  const regularMapped = regularDocs.map(({ _id, ...rest }) => ({
+    id: _id.toString(),
+    ...rest,
+    isReserve: false,
+    locationQrCode: resolveQuestionLocationQrCode(rest as QuestionDocument),
+  }));
+
+  const reserveMapped = reserveDocs.map(({ _id, ...rest }) => ({
+    id: _id.toString(),
+    ...rest,
+    isReserve: true,
+    locationQrCode: resolveQuestionLocationQrCode(rest as QuestionDocument),
+  }));
+
   response.json({
-    questions: docs.map(({ _id, ...rest }) => ({
-      id: _id.toString(),
-      ...rest,
-      locationQrCode: resolveQuestionLocationQrCode(rest as QuestionDocument),
-    })),
+    questions: [...regularMapped, ...reserveMapped].sort((a, b) => (a.round || 0) - (b.round || 0)),
   });
 }));
 
 app.post('/api/admin/questions', requireAdmin, route(async (request: AdminAuthedRequest, response) => {
   const payload = createQuestionPayload(request.body);
   const now = new Date();
+  
   const questions = await getQuestionsCollection();
+  const reservePool = await getReservePoolCollection();
+  const targetCollection = payload.isReserve ? reservePool : questions;
+
   try {
-    const result = await questions.insertOne({ ...payload, createdAt: now, updatedAt: now });
+    const { isReserve, ...dbPayload } = payload; // optional: strip isReserve since the collection dictates it
+    const result = await targetCollection.insertOne({ ...dbPayload, createdAt: now, updatedAt: now } as any);
     response.status(201).json({ id: result.insertedId.toString(), locationQrCode: resolveQuestionLocationQrCode(payload) });
   } catch (error) {
     throw new HttpError(400, 'Invalid question payload or duplicate round number');
@@ -1751,15 +1773,38 @@ app.put('/api/admin/questions/:id', requireAdmin, route(async (request: AdminAut
   const objectId = toObjectId(questionId, 'question id');
 
   const questions = await getQuestionsCollection();
-  try {
-    const existing = await questions.findOne({ _id: objectId });
-    if (!existing) {
-      response.status(404).json({ error: 'Question not found' });
-      return;
-    }
+  const reservePool = await getReservePoolCollection();
 
-    const payload = createQuestionPayload(request.body, existing);
-    await questions.updateOne({ _id: objectId }, { $set: { ...payload, updatedAt: new Date() } });
+  let existing = await questions.findOne({ _id: objectId });
+  let isCurrentlyReserve = false;
+  
+  if (!existing) {
+    existing = await reservePool.findOne({ _id: objectId });
+    isCurrentlyReserve = true;
+  }
+
+  if (!existing) {
+    response.status(404).json({ error: 'Question not found' });
+    return;
+  }
+
+  const payload = createQuestionPayload(request.body, existing);
+  const shouldBeReserve = payload.isReserve;
+  const { isReserve, ...dbPayload } = payload;
+
+  try {
+    if (isCurrentlyReserve !== shouldBeReserve) {
+      // Moved between collections
+      const oldCollection = isCurrentlyReserve ? reservePool : questions;
+      const newCollection = shouldBeReserve ? reservePool : questions;
+      
+      await oldCollection.deleteOne({ _id: objectId });
+      await newCollection.insertOne({ _id: objectId, ...dbPayload, updatedAt: new Date(), createdAt: existing.createdAt || new Date() } as any);
+    } else {
+      // Update in place
+      const targetCollection = isCurrentlyReserve ? reservePool : questions;
+      await targetCollection.updateOne({ _id: objectId }, { $set: { ...dbPayload, updatedAt: new Date() } });
+    }
     response.json({ ok: true });
   } catch {
     throw new HttpError(400, 'Invalid question payload or duplicate round number');
@@ -1768,16 +1813,27 @@ app.put('/api/admin/questions/:id', requireAdmin, route(async (request: AdminAut
 
 app.delete('/api/admin/questions/:id', requireAdmin, route(async (request: AdminAuthedRequest, response) => {
   const questionId = String(request.params.id);
+  const objectId = toObjectId(questionId, 'question id');
 
   const questions = await getQuestionsCollection();
-  await questions.deleteOne({ _id: toObjectId(questionId, 'question id') });
+  const reservePool = await getReservePoolCollection();
+
+  const res = await questions.deleteOne({ _id: objectId });
+  if (res.deletedCount === 0) {
+    await reservePool.deleteOne({ _id: objectId });
+  }
+
   response.json({ ok: true });
 }));
 
 app.delete('/api/admin/questions', requireAdmin, route(async (_request: AdminAuthedRequest, response) => {
   const questions = await getQuestionsCollection();
-  const result = await questions.deleteMany({});
-  response.json({ ok: true, deletedCount: result.deletedCount });
+  const reservePool = await getReservePoolCollection();
+  
+  await questions.deleteMany({});
+  await reservePool.deleteMany({});
+  
+  response.json({ ok: true });
 }));
 
 app.delete('/api/admin/database', requireAdmin, route(async (_request: AdminAuthedRequest, response) => {

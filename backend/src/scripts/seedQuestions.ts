@@ -22,7 +22,6 @@ const newQuestions = [
       output: "Total bill",
       testCases: [{"input":"50 120 100","output":"258"},{"input":"110 200 40","output":"319"},{"input":"50 50 50","output":"150"}]
     },
-    volunteer: { name: "Ravi", initials: "RV", bg: "bg-zinc-950/80 border-indigo-500/20", color: "text-indigo-400" },
     qrPasskey: "QUEST-R1",
     locationQrCode: "QUEST-LOC-R1"
   },
@@ -40,7 +39,6 @@ const newQuestions = [
       output: "Count of even length words",
       testCases: [{"input":"this is a game","output":"3"},{"input":"hello world","output":"0"},{"input":"we love coding","output":"3"}]
     },
-    volunteer: { name: "Priya", initials: "PR", bg: "bg-zinc-950/80 border-emerald-500/20", color: "text-emerald-400" },
     qrPasskey: "QUEST-R2",
     locationQrCode: "QUEST-LOC-R2"
   },
@@ -58,7 +56,6 @@ const newQuestions = [
       output: "Sum",
       testCases: [{"input":"1 2 3 4 5","output":"9"},{"input":"10 20","output":"0"},{"input":"7 7","output":"14"}]
     },
-    volunteer: { name: "Arjun", initials: "AJ", bg: "bg-zinc-950/80 border-amber-500/20", color: "text-amber-400" },
     qrPasskey: "QUEST-R3",
     locationQrCode: "QUEST-LOC-R3"
   },
@@ -76,7 +73,6 @@ const newQuestions = [
       output: "Sum of flattened list",
       testCases: [{"input":"[[1,2],[3,4]]","output":"10"},{"input":"[[10],[20,30],[5]]","output":"65"},{"input":"[[],[1]]","output":"1"}]
     },
-    volunteer: { name: "Vikram", initials: "VK", bg: "bg-zinc-950/80 border-cyan-500/20", color: "text-cyan-400" },
     qrPasskey: "QUEST-R4",
     locationQrCode: "QUEST-LOC-R4"
   },
@@ -94,7 +90,6 @@ const newQuestions = [
       output: "Compressed string",
       testCases: [{"input":"aabcccccaaa","output":"a2b1c5a3"},{"input":"abc","output":"abc"},{"input":"aabb","output":"aabb"}]
     },
-    volunteer: { name: "Sita", initials: "ST", bg: "bg-zinc-950/80 border-rose-500/20", color: "text-rose-400" },
     qrPasskey: "QUEST-R5",
     locationQrCode: "QUEST-LOC-R5"
   },
@@ -112,7 +107,6 @@ const newQuestions = [
       output: "True or False",
       testCases: [{"input":"Tact Coa","output":"True"},{"input":"hello","output":"False"},{"input":"aab","output":"True"}]
     },
-    volunteer: { name: "Rohit", initials: "RH", bg: "bg-zinc-950/80 border-green-500/20", color: "text-green-400" },
     qrPasskey: "QUEST-R6",
     locationQrCode: "QUEST-LOC-R6"
   }
@@ -133,7 +127,6 @@ async function seed() {
             "coord.lng": q.lng, 
             "coord.place": q.place,
             p1: q.p1,
-            volunteer: q.volunteer,
             qrPasskey: q.qrPasskey,
             locationQrCode: q.locationQrCode,
             cx: 0.5, // Defaulting these to center if not provided

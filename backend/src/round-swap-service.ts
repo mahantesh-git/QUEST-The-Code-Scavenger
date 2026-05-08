@@ -16,15 +16,30 @@ export async function claimReserveRound(teamId: string, isByAdmin: boolean = fal
 
   const currentRoundIndex = team.gameState.round;
   const reservePool = await getReservePoolCollection();
-  
-  // Find a question in reserve pool that hasn't been used (in case there are many)
-  // For simplicity, just pick a random one
+
   const reserveQuestions = await reservePool.find({}).toArray();
   if (reserveQuestions.length === 0) {
     return { ok: false, error: 'Reserve pool is currently empty. Cannot swap.' };
   }
 
-  const selectedReserve = reserveQuestions[Math.floor(Math.random() * reserveQuestions.length)];
+  // Collect the IDs of every reserve question this team has already received
+  // across all previous swaps so we never hand the same question twice.
+  const alreadyUsedIds = new Set(Object.values(team.swappedRounds || {}));
+
+  // Prefer questions the team hasn't seen yet
+  let eligibleQuestions = reserveQuestions.filter(
+    q => !alreadyUsedIds.has(q._id.toString())
+  );
+
+  if (eligibleQuestions.length === 0) {
+    // Entire pool has been exhausted for this team (e.g. pool has fewer questions
+    // than the number of swaps allowed). Fall back to the full pool but log a
+    // warning so admins know to add more reserve questions.
+    console.warn(`[Swap] Team ${teamId} exhausted all unique reserve questions — falling back to full pool.`);
+    eligibleQuestions = reserveQuestions;
+  }
+
+  const selectedReserve = eligibleQuestions[Math.floor(Math.random() * eligibleQuestions.length)];
 
   // Deduct points (Admin bypasses this penalty)
   if (!isByAdmin) {
@@ -45,6 +60,9 @@ export async function claimReserveRound(teamId: string, isByAdmin: boolean = fal
         swappedRounds: updatedSwappedRounds, 
         'gameState.stage': 'p1_solve',
         'gameState.handoff': null,
+        // Reset the round timer from the swap moment so elapsed time and speed
+        // bonuses are calculated correctly from when the new question is received.
+        'gameState.currentRoundStartTime': new Date().toISOString(),
         updatedAt: new Date() 
       },
       $inc: { swapsUsed: 1 }
@@ -66,7 +84,11 @@ export async function getCurrentQuestionForTeam(teamId: string): Promise<any | n
     const reservePool = await getReservePoolCollection();
     const reserveQuestion = await reservePool.findOne({ _id: new ObjectId(reserveId) });
     if (reserveQuestion) {
-      return { ...reserveQuestion, round: currentRoundIndex + 1 };
+      // Strip the reserve question's own stored 'round' field (e.g., 11–18)
+      // and replace it with the actual current game round to prevent the
+      // out-of-range round number leaking into the frontend display.
+      const { round: _discarded, ...safeReserveDoc } = reserveQuestion as any;
+      return { ...safeReserveDoc, round: currentRoundIndex + 1 };
     }
   }
 

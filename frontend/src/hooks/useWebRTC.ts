@@ -48,14 +48,16 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
   const [isIncoming, setIsIncoming] = useState(false);
   const [peerConnected, setPeerConnected] = useState(false);
 
-  const pcRef        = useRef<RTCPeerConnection | null>(null);
-  const localStream  = useRef<MediaStream | null>(null);
-  const remoteAudio  = useRef<HTMLAudioElement | null>(null);
-  const iceQueue     = useRef<RTCIceCandidateInit[]>([]);
-  const makingOffer  = useRef(false);
-  const ignoreOffer  = useRef(false);
-  const reconnTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isPolite     = role === 'solver';
+  const pcRef           = useRef<RTCPeerConnection | null>(null);
+  const localStream     = useRef<MediaStream | null>(null);
+  const remoteAudio     = useRef<HTMLAudioElement | null>(null);
+  const iceQueue        = useRef<RTCIceCandidateInit[]>([]);
+  const makingOffer     = useRef(false);
+  const ignoreOffer     = useRef(false);
+  const reconnTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoStopTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTransmitRef   = useRef(false); // mirror of isTransmitting for use inside closures
+  const isPolite        = role === 'solver';
 
   // ── Remote audio element ──────────────────────────────────────────────────
   useEffect(() => {
@@ -171,10 +173,11 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
     };
 
     // Perfect negotiation: browser fires this when SDP needs refreshing.
-    // Only the impolite peer (runner) makes offers; solver only answers.
-    // NOTE: we do NOT manually call this — addTrack() triggers it correctly.
+    // BOTH peers can create offers — polite/impolite only controls COLLISION
+    // resolution (solver rolls back; runner ignores). Without this, the solver's
+    // mic track added after the initial handshake is never renegotiated, causing
+    // one-way audio (runner can't hear solver).
     pc.onnegotiationneeded = async () => {
-      if (isPolite) return; // Solver never initiates offers
       try {
         makingOffer.current = true;
         const offer = await pc.createOffer();
@@ -184,7 +187,7 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
         }
         await pc.setLocalDescription(offer);
         sock.emit('webrtc:signal', { signal: { sdp: pc.localDescription } });
-        console.log('[WT] Offer sent');
+        console.log(`[WT] Offer sent (${role})`);
       } catch (e) {
         console.error('[WT] Offer failed', e);
       } finally {
@@ -321,6 +324,9 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
 
   // ── PTT press: unmute mic + retry remote audio play ───────────────────────
   const startTransmit = useCallback(async () => {
+    // Prevent double-start
+    if (isTransmitRef.current) return;
+
     const stream = await getMicStream();
     stream?.getAudioTracks().forEach(t => (t.enabled = true));
 
@@ -328,18 +334,51 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
     const audio = remoteAudio.current;
     if (audio && audio.paused && audio.srcObject) audio.play().catch(() => {});
 
+    isTransmitRef.current = true;
     setIsTransmitting(true);
     socket?.emit('webrtc:status', { transmitting: true });
     console.log('[WT] PTT ON');
+
+    // Safety auto-release: if stopTransmit is never called (lost pointer/focus),
+    // force-release after 90 s so the mic can never stay hot indefinitely.
+    if (autoStopTimer.current) clearTimeout(autoStopTimer.current);
+    autoStopTimer.current = setTimeout(() => {
+      console.warn('[WT] Auto-release: PTT held > 90 s');
+      stopTransmit();
+    }, 90_000);
   }, [socket, getMicStream]);
 
   // ── PTT release: mute mic ──────────────────────────────────────────────────
   const stopTransmit = useCallback(() => {
+    // Guard: no-op if already off (prevents duplicate socket events)
+    if (!isTransmitRef.current) return;
+
+    if (autoStopTimer.current) { clearTimeout(autoStopTimer.current); autoStopTimer.current = null; }
     localStream.current?.getAudioTracks().forEach(t => (t.enabled = false));
+    isTransmitRef.current = false;
     setIsTransmitting(false);
     socket?.emit('webrtc:status', { transmitting: false });
     console.log('[WT] PTT OFF');
   }, [socket]);
+
+  // ── Global safety net: stop mic when window/tab loses focus ───────────────
+  useEffect(() => {
+    const release = () => {
+      if (isTransmitRef.current) {
+        console.warn('[WT] Focus lost — force-releasing PTT');
+        stopTransmit();
+      }
+    };
+    // Window blur: user switches app or tab
+    window.addEventListener('blur', release);
+    // Visibility change: browser tab hidden (swipe away on mobile)
+    const onVisibility = () => { if (document.hidden) release(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', release);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [stopTransmit]);
 
   return { isTransmitting, isIncoming, peerConnected, startTransmit, stopTransmit };
 }

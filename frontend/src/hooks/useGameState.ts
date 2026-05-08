@@ -26,7 +26,7 @@ export interface HandoffDetails {
   passkey: string;
   lat: string;
   lng: string;
-  volunteer: string;
+
   place: string;
 }
 

@@ -59,6 +59,7 @@ export function SectorMap({ rounds, currentRound, activeQuestion, roundsDone, st
   const [isFullScreen, setIsFullScreen] = useState(false);
   const prevRoundRef = useRef<number>(currentRound);
   const hasCenteredRef = useRef<boolean>(false);
+  const cssHeadingsRef = useRef<{ current: number; target: number } | null>(null);
   // shellRef: the React-managed wrapper div (in-page OR portalled)
   const shellRef = useRef<HTMLDivElement>(null);
   // leafletDivRef: the actual Leaflet container — created once, never unmounted by React
@@ -153,10 +154,10 @@ export function SectorMap({ rounds, currentRound, activeQuestion, roundsDone, st
     setGeoStatus('watching');
     const id = navigator.geolocation.watchPosition(
       (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        setRunnerCoords([latitude, longitude, accuracy, null]);
+        const { latitude, longitude, accuracy, heading } = pos.coords;
+        setRunnerCoords([latitude, longitude, accuracy, heading]);
         if (socket && role === 'runner') {
-          socket.emit('location:stream', { lat: latitude, lng: longitude, accuracy });
+          socket.emit('location:stream', { lat: latitude, lng: longitude, accuracy, heading });
         }
       },
       (err) => {
@@ -326,35 +327,77 @@ export function SectorMap({ rounds, currentRound, activeQuestion, roundsDone, st
 
   useEffect(() => {
     if (!mapInstance || !runnerCoords) return;
-    const [lat, lng, rawAccuracy] = runnerCoords;
+    const [lat, lng, rawAccuracy, heading] = runnerCoords;
     if (typeof lat !== 'number' || isNaN(lat) || typeof lng !== 'number' || isNaN(lng)) return;
 
     const accuracy = typeof rawAccuracy === 'number' && !isNaN(rawAccuracy) ? rawAccuracy : 0;
-    const isAccurate = accuracy <= 100;
-    const dotColor = isAccurate ? '#00BFFF' : '#4D8076';
-    const ringRadius = Math.min(accuracy, 500);
-
+ 
     // ── MARKER CREATE / UPDATE ────────────────────────────────────────────
+    const headingVal = typeof heading === 'number' ? heading : 0;
+    
+    // Smooth Rotation Logic (Shortest Path)
+    if (!cssHeadingsRef.current) {
+      cssHeadingsRef.current = { current: headingVal, target: headingVal };
+    } else {
+      let diff = (headingVal - (cssHeadingsRef.current.current % 360) + 540) % 360 - 180;
+      cssHeadingsRef.current.target = cssHeadingsRef.current.current + diff;
+      cssHeadingsRef.current.current = cssHeadingsRef.current.target;
+    }
+
     if (!runnerMarkerRef.current) {
       const markerHtml = `
-        <div style="width:56px;height:56px;position:relative;display:flex;align-items:center;justify-content:center;">
-          <div style="position:absolute;width:44px;height:44px;border-radius:50%;border:1.5px solid ${dotColor};opacity:0.2;"></div>
-          <div style="position:relative;width:16px;height:16px;border-radius:50%;background:${dotColor};border:2.5px solid #fff;box-shadow:0 0 12px ${dotColor};z-index:2;"></div>
-          <div style="position:absolute;width:16px;height:16px;border-radius:50%;background:${dotColor};opacity:0.35;animation:rmpulse 2s ease-out infinite;z-index:1;"></div>
+        <div style="width:48px;height:48px;position:relative;display:flex;align-items:center;justify-content:center;">
+          <!-- Team Direction Arrow Overlay (Rotating around the node) -->
+          <div class="team-direction-arrow" style="
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform: rotate(${cssHeadingsRef.current.current}deg);
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 3;
+            pointer-events: none;
+          ">
+            <svg width="48" height="48" viewBox="0 0 48 48">
+              <!-- Sharp White Navigation Arrow positioned at the top of the node -->
+              <path 
+                d="M24 2 L30 14 L24 11 L18 14 Z" 
+                fill="white" 
+                stroke="rgba(0,0,0,0.2)"
+                stroke-width="0.5"
+                style="filter: drop-shadow(0 0 2px rgba(0,0,0,0.4));"
+              />
+            </svg>
+          </div>
+
+          <!-- Central Node (Dot) -->
+          <div style="position:absolute;width:32px;height:32px;border-radius:50%;border:1px solid #00BFFF;opacity:0.2;"></div>
+          <div style="position:relative;width:12px;height:12px;border-radius:50%;background:#00BFFF;border:2px solid #fff;box-shadow:0 0 8px #00BFFF;z-index:2;"></div>
+          <div style="position:absolute;width:12px;height:12px;border-radius:50%;background:#00BFFF;opacity:0.3;animation:rmpulse 2s ease-out infinite;z-index:1;"></div>
         </div>
-        <style>@keyframes rmpulse{0%{transform:scale(1);opacity:.35}70%{transform:scale(3);opacity:0}100%{transform:scale(3);opacity:0}}</style>
+        <style>
+          @keyframes rmpulse {
+            0% { transform: scale(1); opacity: 0.3; }
+            70% { transform: scale(3.5); opacity: 0; }
+            100% { transform: scale(3.5); opacity: 0; }
+          }
+        </style>
       `;
-      const icon = L.divIcon({ className: '', html: markerHtml, iconSize: [56, 56], iconAnchor: [28, 28] });
+      const icon = L.divIcon({ className: '', html: markerHtml, iconSize: [48, 48], iconAnchor: [24, 24] });
       runnerMarkerRef.current = L.marker([lat, lng], { icon, zIndexOffset: 1000, interactive: false }).addTo(mapInstance);
-      runnerRingRef.current = L.circle([lat, lng], {
-        radius: ringRadius, color: dotColor, fillColor: dotColor,
-        fillOpacity: 0.06, weight: 1, dashArray: isAccurate ? undefined : '4 4', interactive: false,
-      }).addTo(mapInstance);
     } else {
-      // Just move — no DOM reconstruction
+      // Move marker
       runnerMarkerRef.current.setLatLng([lat, lng]);
-      runnerRingRef.current?.setLatLng([lat, lng]);
-      runnerRingRef.current?.setRadius(ringRadius);
+
+      // Update rotation
+      const el = runnerMarkerRef.current.getElement();
+      if (el) {
+        const arrow = el.querySelector('.team-direction-arrow') as HTMLElement;
+        if (arrow) {
+          arrow.style.transform = `rotate(${cssHeadingsRef.current.current}deg)`;
+        }
+      }
     }
 
     // ── AUTO-CENTER (once per round) ──────────────────────────────────────────

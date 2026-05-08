@@ -6,7 +6,7 @@ function isHandoffDetails(value: unknown): value is HandoffDetails {
   return typeof candidate.passkey === 'string'
     && typeof candidate.lat === 'string'
     && typeof candidate.lng === 'string'
-    && typeof candidate.volunteer === 'string'
+
     && typeof candidate.place === 'string';
 }
 
@@ -25,8 +25,8 @@ export function createInitialGameState(roundCount: number): GameState {
 }
 
 export function calculateDifficulty(elapsedSeconds: number): 'normal' | 'hard' {
-  // Hard mode threshold: If completed in under 3 minutes (180 seconds)
-  return elapsedSeconds < 180 ? 'hard' : 'normal';
+  // Hard mode threshold: If completed in under 20 minutes (1200 seconds)
+  return elapsedSeconds < 1200 ? 'hard' : 'normal';
 }
 
 export function isValidStage(value: unknown): value is GameState['stage'] {

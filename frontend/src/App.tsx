@@ -487,9 +487,11 @@ export default function App() {
   };
 
   const executeSwap = async () => {
-    if (!session || isSwapping) return;
+    if (!session) return;
+    // Note: we intentionally do NOT guard on isSwapping here.
+    // The requester already set isSwapping=true before calling this,
+    // and we still need to proceed with the actual API call.
 
-    setIsSwapping(true);
     try {
       await claimTeamRoundSwap(session.token);
       notify('SWAP EXECUTED: NEW MISSION ACQUIRED', 'success');
@@ -757,7 +759,6 @@ export default function App() {
               passkey: currentRound.qrPasskey,
               lat: currentRound.coord.lat,
               lng: currentRound.coord.lng,
-              volunteer: currentRound.volunteer.name,
               place: currentRound.coord.place,
             },
           });
@@ -785,7 +786,6 @@ export default function App() {
           passkey: currentRound.qrPasskey,
           lat: currentRound.coord.lat,
           lng: currentRound.coord.lng,
-          volunteer: currentRound.volunteer.name,
           place: currentRound.coord.place,
         },
       });
@@ -1216,7 +1216,7 @@ export default function App() {
                           </div>
                           <div className="text-left pt-4 border-t border-white/10 flex items-start gap-3">
                             <MapPin className="text-[var(--color-accent)] shrink-0" />
-                            <div><p className="font-bold uppercase text-sm">{currentRound?.coord?.place}</p><p className="text-xs text-white/40">Volunteer: {currentRound?.volunteer?.name}</p></div>
+                            <div><p className="font-bold uppercase text-sm">{currentRound?.coord?.place}</p></div>
                           </div>
                           <div className="p-4 bg-white/5 border border-[var(--color-accent)]/20 rounded">
                             <span className="text-[10px] uppercase text-white/40 block mb-1">Target Passkey</span>
@@ -1244,7 +1244,7 @@ export default function App() {
                         </div>
                         <div className="corner-card glass-morphism p-6 space-y-4">
                           <div className="flex justify-between items-center"><span className="text-[10px] uppercase font-bold text-[var(--color-accent)]">Target</span><span className="font-mono text-xs">{currentRound.coord.place}</span></div>
-                          <div className="flex justify-between items-center"><span className="text-[10px] uppercase font-bold text-[var(--color-accent)]">Volunteer</span><span className="font-mono text-xs">{currentRound.volunteer.name}</span></div>
+
                           <div className="p-4 bg-white/5 border border-white/10 rounded text-center"><span className="text-[10px] uppercase text-white/40 block mb-1">Passkey</span><span className="text-xl font-bold tracking-[0.3em] break-all">{currentRound.qrPasskey}</span></div>
                         </div>
                         <div className="text-center p-4">

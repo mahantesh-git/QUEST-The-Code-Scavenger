@@ -25,7 +25,7 @@ export const MirrorCodeGame = ({ onComplete, difficulty = 'normal' }: { onComple
   const [tbarColor, setTbarColor] = useState(AC);
   const [tbarTransition, setTbarTransition] = useState('none');
 
-  const W = 120, H = 150, THRESH = 68, SHOW = difficulty === 'hard' ? 1200 : 1800, DRAW = difficulty === 'hard' ? 5000 : 7000;
+  const W = 120, H = 150, THRESH = difficulty === 'hard' ? 82 : 75, SHOW = difficulty === 'hard' ? 1000 : 1500, DRAW = difficulty === 'hard' ? 4000 : 6000;
   
   const activeRef = useRef(false);
   const drawingRef = useRef(false);
@@ -39,6 +39,8 @@ export const MirrorCodeGame = ({ onComplete, difficulty = 'normal' }: { onComple
     [{x:20,y:25},{x:100,y:25},{x:20,y:125},{x:100,y:125}],
     [{x:20,y:75},{x:60,y:25},{x:100,y:75},{x:60,y:125},{x:20,y:75}],
     [{x:60,y:15},{x:15,y:55},{x:35,y:135},{x:85,y:135},{x:105,y:55}],
+    [{x:20,y:20},{x:100,y:20},{x:20,y:130},{x:100,y:130},{x:60,y:75},{x:20,y:20}], // Complex hourglass
+    [{x:10,y:10},{x:110,y:10},{x:110,y:140},{x:10,y:140},{x:60,y:10},{x:60,y:140}], // Complex frame
   ];
 
   function clr(ctx: CanvasRenderingContext2D) {
@@ -225,7 +227,7 @@ export const ThermalCalibrateGame = ({ onComplete, difficulty = 'normal' }: { on
       setShowing(false);
       setPhase('DRAG TO SET TEMPERATURE'); setMsg('Set reactor to memorised level, then confirm');
       setActive(true);
-    }, difficulty === 'hard' ? 1200 : 2000);
+    }, difficulty === 'hard' ? 800 : 1500);
   };
 
   useEffect(() => { startRound(); }, [round]);
@@ -245,7 +247,7 @@ export const ThermalCalibrateGame = ({ onComplete, difficulty = 'normal' }: { on
     setActive(false);
     const diff = Math.abs(current - target);
     setShowing(true);
-    if (diff <= (difficulty === 'hard' ? 5 : 8)) {
+    if (diff <= (difficulty === 'hard' ? 3 : 6)) {
       setPhase('CALIBRATION LOCKED'); setMsg(`Error: ${Math.round(diff)}% — cleared`); haptic([100, 50, 200]);
       setTimeout(() => { if (round >= 2) onComplete(); else setRound(r => r + 1); }, 1200);
     } else {
@@ -318,7 +320,7 @@ export const TelescopeLockGame = ({ onComplete, difficulty = 'normal' }: { onCom
   const [round, setRound] = useState(0);
   const [active, setActive] = useState(true);
 
-  const HOLD_REQ = difficulty === 'hard' ? 3000 : 2000;
+  const HOLD_REQ = difficulty === 'hard' ? 5000 : 3000;
 
   useEffect(() => {
     setActive(true); setIsHolding(false); setHoldTime(0); setZoom(10);
@@ -329,7 +331,7 @@ export const TelescopeLockGame = ({ onComplete, difficulty = 'normal' }: { onCom
   useEffect(() => {
     if (!active) return;
     const diff = Math.abs(zoom - targetZoom);
-    const focused = diff <= (difficulty === 'hard' ? 3 : 5);
+    const focused = diff <= (difficulty === 'hard' ? 2 : 4);
     
     if (focused && !isHolding) {
       setIsHolding(true);
@@ -424,6 +426,8 @@ export const DnaSpliceGame = ({ onComplete, difficulty = 'normal' }: { onComplet
     ...(difficulty === 'hard' ? [
       { id: 'E', label: 'CGC-ATA', color: '#b400ff', pair: 'GCG-TAT' },
       { id: 'F', label: 'ATA-CGC', color: '#ff00b4', pair: 'TAT-GCG' },
+      { id: 'G', label: 'GGG-CCC', color: '#00ffff', pair: 'CCC-GGG' },
+      { id: 'H', label: 'AAA-TTT', color: '#ffff00', pair: 'TTT-AAA' },
     ] : [])
   ];
 

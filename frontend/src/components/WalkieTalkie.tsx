@@ -28,7 +28,8 @@ export const WalkieTalkie: React.FC<WalkieTalkieProps> = ({ socket, teamId, role
     if (role !== 'solver') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !isTransmitting && !isIncoming) {
+      // Allow transmitting even when incoming — full-duplex, not simplex
+      if (e.code === 'Space' && !isTransmitting) {
         const active = document.activeElement as HTMLElement | null;
         const isTyping = active?.tagName === 'INPUT' ||
           active?.tagName === 'TEXTAREA' ||
@@ -63,7 +64,7 @@ export const WalkieTalkie: React.FC<WalkieTalkieProps> = ({ socket, teamId, role
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [role, isTransmitting, isIncoming, startTransmit, stopTransmit]);
+  }, [role, isTransmitting, startTransmit, stopTransmit]);
 
   useEffect(() => {
     if (isTransmitting) setLastState('transmitting');
@@ -75,6 +76,20 @@ export const WalkieTalkie: React.FC<WalkieTalkieProps> = ({ socket, teamId, role
     return (
       <div className="flex justify-center items-center">
         <div className="relative">
+          {/* Connected idle glow — slow green breathe */}
+          <AnimatePresence>
+            {peerConnected && !isTransmitting && !isIncoming && (
+              <motion.div
+                key="connected-glow-compact"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0.3, 0.7, 0.3] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute -inset-1 rounded-full border-2 border-emerald-400/60 shadow-[0_0_12px_rgba(52,211,153,0.5)]"
+              />
+            )}
+          </AnimatePresence>
+
           <AnimatePresence>
             {(isTransmitting || isIncoming) && (
               <motion.div
@@ -91,20 +106,30 @@ export const WalkieTalkie: React.FC<WalkieTalkieProps> = ({ socket, teamId, role
           </AnimatePresence>
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onMouseDown={startTransmit}
-            onMouseUp={stopTransmit}
-            onTouchStart={startTransmit}
-            onTouchEnd={stopTransmit}
-            disabled={isIncoming || !peerConnected}
+            onPointerDown={(e) => {
+              // Capture pointer so pointerup fires even if finger slides off button
+              e.currentTarget.setPointerCapture(e.pointerId);
+              startTransmit();
+            }}
+            onPointerUp={(e) => {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              stopTransmit();
+            }}
+            onPointerCancel={stopTransmit}
+            disabled={!peerConnected}
             className={cn(
               "relative z-10 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg",
               !peerConnected ? "bg-gray-800 text-gray-500 border border-gray-700" :
-                isTransmitting
-                  ? "bg-[var(--color-accent)] text-white shadow-[0_0_20px_rgba(217,31,64,0.5)] border-transparent"
-                  : "bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] border-blue-400"
+                isTransmitting && isIncoming
+                  ? "bg-purple-600 text-white shadow-[0_0_20px_rgba(147,51,234,0.5)] border-purple-400"
+                  : isTransmitting
+                    ? "bg-[var(--color-accent)] text-white shadow-[0_0_20px_rgba(217,31,64,0.5)] border-transparent"
+                    : isIncoming
+                      ? "bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] border-blue-400"
+                      : "bg-zinc-800 text-gray-400 border border-emerald-500/40"
             )}
           >
-            {isIncoming ? <Volume2 className="w-6 h-6 animate-pulse" /> : <Mic className="w-6 h-6" />}
+            {isIncoming && !isTransmitting ? <Volume2 className="w-6 h-6 animate-pulse" /> : <Mic className="w-6 h-6" />}
           </motion.button>
 
           {/* Small Visualizer */}
@@ -131,7 +156,21 @@ export const WalkieTalkie: React.FC<WalkieTalkieProps> = ({ socket, teamId, role
   return (
     <div className="flex flex-col items-center justify-center p-4">
       <div className="relative flex flex-col items-center justify-center w-full aspect-square max-w-[160px]">
-        {/* Animated Rings */}
+        {/* Connected idle glow — slow green breathe */}
+        <AnimatePresence>
+          {peerConnected && !isTransmitting && !isIncoming && (
+            <motion.div
+              key="connected-glow"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0.4, 1, 0.4] }}
+              exit={{ opacity: 0, transition: { duration: 0.3 } }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute -inset-2 rounded-full border-2 border-emerald-400/70 shadow-[0_0_24px_rgba(52,211,153,0.55)]"
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Animated Rings when transmitting */}
         <AnimatePresence>
           {(isTransmitting || isIncoming) && (
             <>
@@ -162,20 +201,29 @@ export const WalkieTalkie: React.FC<WalkieTalkieProps> = ({ socket, teamId, role
         {/* The Button */}
         <motion.button
           whileTap={{ scale: 0.95 }}
-          onMouseDown={startTransmit}
-          onMouseUp={stopTransmit}
-          onTouchStart={startTransmit}
-          onTouchEnd={stopTransmit}
-          disabled={isIncoming || !peerConnected}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            startTransmit();
+          }}
+          onPointerUp={(e) => {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+            stopTransmit();
+          }}
+          onPointerCancel={stopTransmit}
+          disabled={!peerConnected}
           className={cn(
             "relative z-10 w-32 h-32 rounded-full flex flex-col items-center justify-center transition-all duration-300 border-4 shadow-2xl",
             !peerConnected ? "bg-gray-800 border-gray-700 shadow-none text-gray-500" :
-              isTransmitting
-                ? "bg-[var(--color-accent)] border-transparent shadow-[0_0_50px_rgba(217,31,64,0.6)] text-white"
-                : "bg-blue-600 border-blue-400 shadow-[0_0_50px_rgba(37,99,235,0.5)] text-white"
+              isTransmitting && isIncoming
+                ? "bg-purple-600 border-purple-400 shadow-[0_0_50px_rgba(147,51,234,0.6)] text-white"
+                : isTransmitting
+                  ? "bg-[var(--color-accent)] border-transparent shadow-[0_0_50px_rgba(217,31,64,0.6)] text-white"
+                  : isIncoming
+                    ? "bg-blue-600 border-blue-400 shadow-[0_0_50px_rgba(37,99,235,0.5)] text-white"
+                    : "bg-zinc-800 border-emerald-500/50 shadow-[0_0_20px_rgba(52,211,153,0.2)] text-emerald-400"
           )}
         >
-          {isIncoming ? <Volume2 className="w-12 h-12 animate-pulse" /> : <Mic className="w-12 h-12" />}
+          {isIncoming && !isTransmitting ? <Volume2 className="w-12 h-12 animate-pulse" /> : <Mic className="w-12 h-12" />}
         </motion.button>
 
         {/* Visualizer bars when active */}

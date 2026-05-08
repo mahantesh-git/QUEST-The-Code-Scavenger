@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Trophy, Clock, Target, MapPin, Zap, ChevronRight, ChevronLeft, Maximize, Minimize, ShieldAlert } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, resolveImageUrl } from '@/lib/utils';
 import { formatDuration } from '@/lib/formatDuration';
 import { getLeaderboard, getQuestions, LeaderboardTeam, RoundQuestion } from '@/lib/api';
 import L from 'leaflet';
@@ -59,6 +59,9 @@ function MapView({ teams, questions, now }: { teams: LeaderboardTeam[], question
   const mapRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const markersRef = useRef<Record<string, L.Marker>>({});
+  // Tracks the actual CSS rotation applied per team, so we can always
+  // add the shortest delta instead of jumping to an absolute value.
+  const cssHeadingsRef = useRef<Record<string, number>>({});
 
   // Initialize map once on mount
   useEffect(() => {
@@ -112,6 +115,7 @@ function MapView({ teams, questions, now }: { teams: LeaderboardTeam[], question
       }
 
       const lat = team.currentLat;
+
       const lng = team.currentLng;
       const hasRealGps = true;
 
@@ -119,37 +123,64 @@ function MapView({ teams, questions, now }: { teams: LeaderboardTeam[], question
 
       const pulse = !team.finishTime && isInField && hasRealGps;
       const durStr = formatDuration(team.startTime, team.finishTime, now);
+      const hasAvatar = !!team.runnerAvatar;
+      const coreSize = hasAvatar ? 56 : 12;
+      const pulseSize = hasAvatar ? 64 : 18;
+      const helpSize = hasAvatar ? 72 : 32;
+      const successSize = hasAvatar ? 84 : 48;
+      const handoffSize = hasAvatar ? 112 : 80;
+      const clipStyle = hasAvatar ? 'border-radius:50%;' : 'clip-path:var(--clip-oct);';
+      // Normalize heading to 0-360 for the initial HTML render so CSS never
+      // starts from an unbounded accumulated value and spins to the target.
+      const initH = team.currentHeading !== null
+        ? ((team.currentHeading % 360) + 360) % 360
+        : 0;
+      const showArrow = team.currentHeading !== null;
+
       const html = `
-        <div class="team-marker-container" style="position:relative;display:flex;flex-direction:column;align-items:center;transform:translate(0,-100%);margin-top:-6px;pointer-events:none;font-family:var(--font-mono);">
-          <!-- Tooltip Container -->
-          <div style="background:rgba(10,10,10,0.9);border:1px solid rgba(217, 31, 64, 0.4);padding:4px 10px;margin-bottom:8px;box-shadow:0 0 15px rgba(0,0,0,0.5);display:flex;flex-direction:column;align-items:center;white-space:nowrap;clip-path:var(--clip-oct);">
-             <span class="team-name" style="color:#fff;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">${team.name}</span>
-             <div style="display:flex;gap:12px;align-items:center;border-top:1px solid rgba(255,255,255,0.1);padding-top:2px;">
-               <span class="team-progress" style="color:var(--color-accent);font-size:9px;font-weight:bold;">${team.solvedCount}/${questions.length}</span>
-               <span class="team-time" style="color:rgba(255,255,255,0.4);font-size:9px;">${durStr}</span>
-             </div>
-          </div>
+        <div class="team-marker-container" style="position:relative;display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-50%);pointer-events:none;font-family:var(--font-mono);">
           
-          <!-- Diamond Marker -->
-          <div style="position:relative;width:12px;height:12px;display:flex;align-items:center;justify-content:center;">
-              <div class="team-pulse" style="position:absolute;width:18px;height:18px;background:rgba(217, 31, 64, 0.3);clip-path:var(--clip-oct);filter:blur(4px);opacity:0.8;${pulse ? 'animation:marker-pulse 2s infinite' : ''}"></div>
+          <!-- Diamond/Avatar Marker -->
+          <div style="position:relative;width:${coreSize}px;height:${coreSize}px;display:flex;align-items:center;justify-content:center;">
+              <div class="team-pulse" style="position:absolute;width:${pulseSize}px;height:${pulseSize}px;background:rgba(217, 31, 64, 0.3);${clipStyle}filter:blur(4px);opacity:0.8;${pulse ? 'animation:marker-pulse 2s infinite' : ''}"></div>
                
               <!-- Tactical Help Pulse -->
-              <div class="team-help-layer" style="position:absolute;width:32px;height:32px;display:${team.helpRequested ? 'block' : 'none'};pointer-events:none;">
-                <div style="position:absolute;inset:0;border:2px solid var(--color-accent);clip-path:var(--clip-oct);animation:ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;opacity:0.8;"></div>
-                <div style="position:absolute;inset:10px;background:var(--color-accent);clip-path:var(--clip-oct);filter:blur(6px);animation:pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;"></div>
+              <div class="team-help-layer" style="position:absolute;width:${helpSize}px;height:${helpSize}px;display:${team.helpRequested ? 'block' : 'none'};pointer-events:none;">
+                <div style="position:absolute;inset:0;border:2px solid var(--color-accent);${clipStyle}animation:ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;opacity:0.8;"></div>
+                <div style="position:absolute;inset:10px;background:var(--color-accent);${clipStyle}filter:blur(6px);animation:pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;"></div>
               </div>
 
               <!-- Success Ripple (Recent Validation) -->
-              <div class="team-success-layer" style="position:absolute;width:48px;height:48px;display:none;pointer-events:none;align-items:center;justify-content:center;">
-                <div style="position:absolute;inset:0;border:3px solid #10b981;clip-path:var(--clip-oct);animation:ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;opacity:0.6;"></div>
-                <div style="position:absolute;inset:8px;border:2px solid #34d399;clip-path:var(--clip-oct);animation:ping 2s cubic-bezier(0, 0, 0.2, 1) 0.5s infinite;opacity:0.4;"></div>
+              <div class="team-success-layer" style="position:absolute;width:${successSize}px;height:${successSize}px;display:none;pointer-events:none;align-items:center;justify-content:center;">
+                <div style="position:absolute;inset:0;border:3px solid #10b981;${clipStyle}animation:ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;opacity:0.6;"></div>
+                <div style="position:absolute;inset:8px;border:2px solid #34d399;${clipStyle}animation:ping 2s cubic-bezier(0, 0, 0.2, 1) 0.5s infinite;opacity:0.4;"></div>
               </div>
 
-              <div style="width:8px;height:8px;background:var(--color-accent);transform:rotate(45deg);border:1px solid #000;box-shadow:0 0 8px var(--color-accent);"></div>
-
+              ${team.runnerAvatar 
+                ? `<!-- Avatar: static, never rotates -->
+                   <div style="position:relative;width:56px;height:56px;z-index:10;">
+                     <div style="width:56px;height:56px;background:var(--color-accent);border-radius:50%;overflow:hidden;box-shadow:0 0 10px var(--color-accent);">
+                       <img src="${resolveImageUrl(team.runnerAvatar)}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;" onerror="this.parentElement.style.background='transparent';this.style.display='none';" />
+                     </div>
+                     <!-- Arrow overlay: rotates around avatar center, face untouched -->
+                     <div class="team-direction-arrow" style="position:absolute;inset:0;transform:rotate(${initH}deg);transform-origin:center center;transition:transform 0.3s ease-out;display:${showArrow ? 'block' : 'none'};pointer-events:none;">
+                       <svg style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);" width="14" height="18" viewBox="0 0 14 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                         <polygon points="7,0 14,18 7,13 0,18" fill="white" filter="drop-shadow(0 0 3px rgba(0,0,0,0.8))" />
+                       </svg>
+                     </div>
+                   </div>`
+                : `<!-- Diamond fallback: static dot + rotating arrow overlay -->
+                   <div style="position:relative;width:16px;height:16px;z-index:10;display:flex;align-items:center;justify-content:center;">
+                     <div style="width:12px;height:12px;background:var(--color-accent);border:1px solid #000;box-shadow:0 0 8px var(--color-accent);"></div>
+                     <div class="team-direction-arrow" style="position:absolute;inset:0;transform:rotate(${initH}deg);transform-origin:center center;transition:transform 0.3s ease-out;display:${showArrow ? 'block' : 'none'};pointer-events:none;">
+                       <svg style="position:absolute;top:-16px;left:50%;transform:translateX(-50%);" width="12" height="16" viewBox="0 0 14 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                         <polygon points="7,0 14,18 7,13 0,18" fill="white" filter="drop-shadow(0 0 3px rgba(0,0,0,0.8))" />
+                       </svg>
+                     </div>
+                   </div>`
+              }
               <!-- Handoff Layer (Runner Done) -->
-              <div class="team-handoff-layer" style="position:absolute;width:80px;height:80px;display:${team.stage === 'runner_done' ? 'flex' : 'none'};pointer-events:none;align-items:center;justify-content:center;z-index:0;">
+              <div class="team-handoff-layer" style="position:absolute;width:${handoffSize}px;height:${handoffSize}px;display:${team.stage === 'runner_done' ? 'flex' : 'none'};pointer-events:none;align-items:center;justify-content:center;z-index:0;">
                 <div style="position:absolute;inset:0;border:3px solid #10b981;clip-path:var(--clip-oct);animation:marker-ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;opacity:0.8;box-shadow: 0 0 15px #10b981;"></div>
                 <div style="position:absolute;inset:15px;background:#10b981;clip-path:var(--clip-oct);filter:blur(12px);opacity:0.4;animation:marker-pulse 2s infinite;"></div>
               </div>
@@ -164,11 +195,15 @@ function MapView({ teams, questions, now }: { teams: LeaderboardTeam[], question
                 }
               </style>
            </div>
+
+          <!-- Tooltip Container -->
+          <div style="margin-top:8px;background:rgba(10,10,10,0.8);border:1px solid rgba(255,255,255,0.15);padding:4px 10px;box-shadow:0 0 10px rgba(0,0,0,0.5);border-radius:12px;white-space:nowrap;display:flex;align-items:center;justify-content:center;">
+             <span class="team-name" style="color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">${team.name}</span>
+          </div>
         </div>
       `;
 
       const icon = L.divIcon({ html, className: 'bg-transparent border-none', iconSize: [0, 0] });
-
       if (markersRef.current[team.id]) {
         const m = markersRef.current[team.id];
         m.setLatLng([lat, lng]);
@@ -182,6 +217,7 @@ function MapView({ teams, questions, now }: { teams: LeaderboardTeam[], question
           const helpEl = el.querySelector('.team-help-layer') as HTMLElement;
           const successEl = el.querySelector('.team-success-layer') as HTMLElement;
           const handoffEl = el.querySelector('.team-handoff-layer') as HTMLElement;
+          const arrowEl = el.querySelector('.team-direction-arrow') as HTMLElement;
 
           if (nameEl) nameEl.textContent = team.name;
           if (progressEl) progressEl.textContent = `${team.solvedCount}/${questions.length}`;
@@ -199,6 +235,24 @@ function MapView({ teams, questions, now }: { teams: LeaderboardTeam[], question
             helpEl.style.display = team.helpRequested ? 'block' : 'none';
           }
 
+          if (arrowEl) {
+            const h = team.currentHeading;
+            if (h !== null) {
+              const targetH = ((h % 360) + 360) % 360;
+              const prevCssH = cssHeadingsRef.current[team.id] ?? targetH;
+              let delta = targetH - (prevCssH % 360);
+              if (delta > 180) delta -= 360;
+              if (delta < -180) delta += 360;
+              const newCssH = prevCssH + delta;
+              cssHeadingsRef.current[team.id] = newCssH;
+              arrowEl.style.transform = `rotate(${newCssH}deg)`;
+              arrowEl.style.display = 'block';
+            } else {
+              arrowEl.style.display = 'none';
+              cssHeadingsRef.current[team.id] = 0;
+            }
+          }
+
           if (successEl) {
             const validatedAt = team.lastValidatedAt ? new Date(team.lastValidatedAt).getTime() : 0;
             const diff = now - validatedAt;
@@ -209,6 +263,9 @@ function MapView({ teams, questions, now }: { teams: LeaderboardTeam[], question
       } else {
         const m = L.marker([lat, lng], { icon, interactive: false }).addTo(layerGroup);
         markersRef.current[team.id] = m;
+        // Seed the CSS heading ref with the normalized initial value so the
+        // first DOM update computes the correct shortest-path delta.
+        cssHeadingsRef.current[team.id] = initH;
       }
     });
 

@@ -22,7 +22,6 @@ const reserveQuestions = [
     place: "Location 1",
     lat: "15°26'03.7\"N",
     lng: "75°38'53.4\"E",
-    volunteer: { name: "---", initials: "---", bg: "bg-zinc-950/80 border-indigo-500/20", color: "text-indigo-400" },
     qrPasskey: "QUEST-R11",
     locationQrCode: "QUEST-LOC-R11"
   },
@@ -39,7 +38,6 @@ const reserveQuestions = [
     place: "Location 2",
     lat: "15°26'02.5\"N",
     lng: "75°38'51.6\"E",
-    volunteer: { name: "---", initials: "---", bg: "bg-zinc-950/80 border-emerald-500/20", color: "text-emerald-400" },
     qrPasskey: "QUEST-R12",
     locationQrCode: "QUEST-LOC-R12"
   },
@@ -55,7 +53,6 @@ const reserveQuestions = [
     place: "Location 3",
     lat: "15°25'59.9\"N",
     lng: "75°38'50.9\"E",
-    volunteer: { name: "---", initials: "---", bg: "bg-zinc-950/80 border-amber-500/20", color: "text-amber-400" },
     qrPasskey: "QUEST-R13",
     locationQrCode: "QUEST-LOC-R13"
   },
@@ -72,7 +69,6 @@ const reserveQuestions = [
     place: "Location 4",
     lat: "15°25'58.6\"N",
     lng: "75°38'58.4\"E",
-    volunteer: { name: "---", initials: "---", bg: "bg-zinc-950/80 border-rose-500/20", color: "text-rose-400" },
     qrPasskey: "QUEST-R14",
     locationQrCode: "QUEST-LOC-R14"
   },
@@ -88,7 +84,6 @@ const reserveQuestions = [
     place: "Location 5",
     lat: "15°26'07.5\"N",
     lng: "75°38'50.0\"E",
-    volunteer: { name: "---", initials: "---", bg: "bg-zinc-950/80 border-cyan-500/20", color: "text-cyan-400" },
     qrPasskey: "QUEST-R15",
     locationQrCode: "QUEST-LOC-R15"
   },
@@ -104,7 +99,6 @@ const reserveQuestions = [
     place: "Location 6",
     lat: "15°26'05.1\"N",
     lng: "75°38'48.1\"E",
-    volunteer: { name: "---", initials: "---", bg: "bg-zinc-950/80 border-purple-500/20", color: "text-purple-400" },
     qrPasskey: "QUEST-R16",
     locationQrCode: "QUEST-LOC-R16"
   },
@@ -120,7 +114,6 @@ const reserveQuestions = [
     place: "Location 7",
     lat: "15°26'00.4\"N",
     lng: "75°38'48.2\"E",
-    volunteer: { name: "---", initials: "---", bg: "bg-zinc-950/80 border-blue-500/20", color: "text-blue-400" },
     qrPasskey: "QUEST-R17",
     locationQrCode: "QUEST-LOC-R17"
   },
@@ -136,7 +129,6 @@ const reserveQuestions = [
     place: "Location 8",
     lat: "15°25'57.8\"N",
     lng: "75°38'54.6\"E",
-    volunteer: { name: "---", initials: "---", bg: "bg-zinc-950/80 border-pink-500/20", color: "text-pink-400" },
     qrPasskey: "QUEST-R18",
     locationQrCode: "QUEST-LOC-R18"
   }
@@ -169,7 +161,6 @@ async function seed() {
         lng: q.lng,
         place: q.place
       },
-      volunteer: q.volunteer,
       qrPasskey: q.qrPasskey,
       locationQrCode: q.locationQrCode,
       cx: 0.5,

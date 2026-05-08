@@ -1644,7 +1644,6 @@ export function RunnerGame({
               {currentRound && (
                 <div className="corner-card glass-morphism p-6 space-y-4">
                   <div className="flex justify-between items-center"><span className="text-[10px] uppercase font-bold text-[var(--color-accent)]">Target</span><span className="font-mono text-xs text-right max-w-[150px]">{currentRound.coord.place}</span></div>
-                  <div className="flex justify-between items-center"><span className="text-[10px] uppercase font-bold text-[var(--color-accent)]">Volunteer</span><span className="font-mono text-xs">{currentRound.volunteer.name}</span></div>
                   <div className="p-4 bg-white/5 border border-white/10 rounded text-center relative group">
                     <span className="text-[10px] uppercase text-white/40 block mb-1">Passkey Status</span>
                     <span className="text-sm font-bold tracking-[0.2em] text-[var(--color-accent)] uppercase">
@@ -1756,7 +1755,7 @@ export function RunnerGame({
               <h2 className="text-lg font-bold tracking-widest uppercase">AR Unavailable</h2>
               <p className="text-xs text-white/40 font-mono uppercase tracking-widest leading-relaxed">
                 AR camera failed or was denied. Admin has been notified.
-                Ask the volunteer at this location to confirm your arrival.
+                Proceed to manual verification.
               </p>
             </div>
 
@@ -1791,7 +1790,7 @@ export function RunnerGame({
                 size="md"
                 disabled={distance === null || distance > 10}
                 onClick={() => {
-                  // Volunteer-confirmed manual capture — go directly to passkey
+                  // Manual capture — go directly to passkey
                   setError(null);
                   setScreen('passkey');
                 }}
@@ -1816,7 +1815,7 @@ export function RunnerGame({
                 className="w-full text-white/60 text-xs font-mono uppercase tracking-widest py-2 hover:text-white/90 transition-colors mt-2"
                 onClick={() => setScreen('location')}
               >
-                ← Back to map
+                ← Back to AR Scanner
               </button>
             </div>
           </div>
@@ -1843,13 +1842,12 @@ export function RunnerGame({
               {currentRound && (
                 <div className="corner-card glass-morphism p-6 space-y-4 mb-6">
                   <div className="flex justify-between items-center"><span className="text-[10px] uppercase font-bold text-[var(--color-accent)]">Target</span><span className="font-mono text-xs text-right max-w-[150px]">{currentRound.coord.place}</span></div>
-                  <div className="flex justify-between items-center"><span className="text-[10px] uppercase font-bold text-[var(--color-accent)]">Volunteer</span><span className="font-mono text-xs">{currentRound.volunteer.name}</span></div>
                   <div className="p-4 bg-white/5 border border-white/10 rounded text-center relative group">
                     <span className="text-[10px] uppercase text-white/40 block mb-1">Encrypted Access</span>
                     <span className="text-sm font-bold tracking-[0.2em] text-[var(--color-accent)] uppercase">
                       [ NODE LOCKED ]
                     </span>
-                    <div className="text-[9px] font-mono text-white/20 mt-1 uppercase">Enter bypass code from volunteer</div>
+                    <div className="text-[9px] font-mono text-white/20 mt-1 uppercase">Enter bypass code to unlock</div>
                   </div>
                 </div>
               )}
@@ -1975,17 +1973,8 @@ export function RunnerGame({
             <div className="absolute inset-0 bg-[var(--color-accent)]/5 pointer-events-none" />
             <div className="relative z-10 space-y-8">
 
-              <motion.div animate={{ scale: [1, 1.05, 1], rotate: [0, 5, -5, 0] }} transition={{ duration: 2, repeat: Infinity }}>
-                <div className="w-24 h-24 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 flex items-center justify-center mx-auto">
-                  <Trophy className="w-12 h-12 text-[var(--color-accent)]" />
-                </div>
-              </motion.div>
-
               <div className="space-y-2">
-                <h2 className="text-3xl font-bold tracking-[0.3em] uppercase text-[var(--color-accent)]">CHALLENGE COMPLETE!</h2>
-                <p className="text-[10px] text-white/40 font-mono uppercase tracking-widest">
-                  Round {currentRoundIndex + 1} successfully cleared.
-                </p>
+                <h3 className="text-2xl font-bold tracking-[0.3em] uppercase text-[var(--color-accent)]">Round {currentRoundIndex + 1} successfully cleared.</h3>
               </div>
 
               <div className="bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 p-4 space-y-2">
@@ -2000,16 +1989,8 @@ export function RunnerGame({
                 </p>
               </div>
 
-              <div className="flex gap-1 justify-center">
-                {[...Array(3)].map((_, i) => (
-                  <motion.div key={i} animate={{ scale: [0.8, 1.2, 0.8] }} transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}>
-                    <Star className="w-5 h-5 text-[var(--color-accent)] fill-[var(--color-accent)]" />
-                  </motion.div>
-                ))}
-              </div>
-
               <Button
-                className="w-full font-bold uppercase tracking-[0.2em] h-14 btn-primary" size="md"
+                className="w-full font-bold uppercase tracking-[0.2em] h-14 btn-primary " size="md"
                 onClick={handleFinishRound}
                 disabled={completing}
               >
