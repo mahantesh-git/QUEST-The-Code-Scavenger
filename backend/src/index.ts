@@ -1202,6 +1202,11 @@ app.post('/api/runner/complete-round', requireAuth, requireGameActive, route(asy
     return;
   }
 
+  if (team.gameState.stage !== 'runner_game' && team.gameState.stage !== 'runner_done') {
+    response.status(409).json({ error: 'Round completion is not active' });
+    return;
+  }
+
   const roundCount = await getRoundCount();
   const currentRound = team.gameState.round;
   const roundsDone = [...team.gameState.roundsDone];
