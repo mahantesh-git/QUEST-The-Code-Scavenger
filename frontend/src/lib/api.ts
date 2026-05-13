@@ -603,3 +603,36 @@ export async function adminPostArena1DiscordReport(token: string) {
 export async function adminUnlockArena1Team(token: string, teamId: string) {
   return requestJson<{ ok: boolean; message: string }>(`/admin/a1/teams/${teamId}/unlock`, { method: 'POST' }, token);
 }
+
+export async function adminPostDiscordReport(token: string) {
+  return requestJson<{ ok: boolean }>('/admin/report/discord', { method: 'POST' }, token);
+}
+
+/**
+ * Triggers a browser file download of the main event Excel report.
+ * Uses a fetch + blob approach so we can pass the Authorization header.
+ */
+export async function adminDownloadMainReport(token: string) {
+  const response = await fetch(buildApiUrl('/admin/report/excel'), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'ngrok-skip-browser-warning': 'true',
+    },
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new ApiError((payload as any)?.error || 'Download failed', response.status);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `main_event_report_${Date.now()}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

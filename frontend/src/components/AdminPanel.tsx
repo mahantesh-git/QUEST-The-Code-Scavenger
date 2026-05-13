@@ -312,7 +312,7 @@ function AdminPanelContent({ onBack }: { onBack: () => void }) {
               transition={{ duration: 0.2 }}
               className={cn("relative", activePage === 'leaderboard' ?"h-full" :"min-h-full")}
             >
-              {activePage === 'leaderboard' && <LeaderboardView />}
+              {activePage === 'leaderboard' && <LeaderboardView token={token!} />}
               {activePage === 'teams' && (
                 <TeamManagement
                   token={token}

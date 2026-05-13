@@ -57,6 +57,7 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
   const reconnTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoStopTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTransmitRef   = useRef(false); // mirror of isTransmitting for use inside closures
+  const activeRef       = useRef(false);  // true while the main effect is mounted
   const isPolite        = role === 'solver';
 
   // ── Remote audio element ──────────────────────────────────────────────────
@@ -199,18 +200,14 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPolite, getMicStream]);
 
-  // ── Main signaling effect ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!enabled || !socket) return;
+  // ── Shared init: build PC, attach mic, announce ready ────────────────────
+  // Extracted so the socket 'reconnect' handler can call the exact same steps.
+  const initPeerConnection = useCallback((sock: Socket) => {
+    const pc = buildPC(sock);
 
-    buildPC(socket);
-
-    // Step 1: acquire mic and add track BEFORE announcing ready.
-    // The track addition will trigger onnegotiationneeded on the runner,
-    // which creates and sends the offer automatically.
     getMicStream().then(stream => {
-      const pc = pcRef.current;
-      if (!pc || pc.signalingState === 'closed') return;
+      // pc might have been replaced if initPeerConnection was called again
+      if (pcRef.current !== pc || pc.signalingState === 'closed') return;
 
       if (stream) {
         const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
@@ -218,20 +215,26 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
           sender.replaceTrack(stream.getAudioTracks()[0]);
         } else {
           stream.getTracks().forEach(t => pc.addTrack(t, stream));
-          // ↑ This fires onnegotiationneeded → runner sends offer automatically
+          // ↑ Fires onnegotiationneeded → runner sends offer automatically
         }
       } else {
-        // No mic — add a recvonly transceiver so we can still HEAR the peer
+        // No mic — recvonly so we can still hear the peer
         if (pc.getTransceivers().length === 0) {
           pc.addTransceiver('audio', { direction: 'recvonly' });
         }
       }
 
-      // Step 2: tell the peer we're ready.
-      // Runner: offer will already be in flight from onnegotiationneeded.
-      // Solver: waits for runner's offer to arrive.
-      socket.emit('webrtc:signal', { signal: { type: 'ready' } });
+      sock.emit('webrtc:signal', { signal: { type: 'ready' } });
+      console.log('[WT] Announced ready');
     });
+  }, [buildPC, getMicStream]);
+
+  // ── Main signaling effect ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!enabled || !socket) return;
+
+    activeRef.current = true;
+    initPeerConnection(socket);
 
     // ── Inbound signal handler ─────────────────────────────────────────────
     const handleSignal = async (data: { from: string; signal: any }) => {
@@ -244,9 +247,28 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
       const { signal } = data;
 
       try {
-        // Peer announced ready → solver acknowledges, no action needed
-        // (runner's offer is already being sent via onnegotiationneeded)
-        if (signal.type === 'ready') return;
+        // Peer announced (or re-announced) ready:
+        if (signal.type === 'ready') {
+          console.log('[WT] Peer ready');
+          // If we are the impolite peer (runner), the solver just restarted or joined.
+          // We must proactively send a fresh offer so their new PC gets our tracks.
+          // If we are the polite peer (solver), the runner just restarted, but
+          // they will automatically send us an offer, so we do nothing.
+          if (!isPolite && pc.signalingState === 'stable') {
+            try {
+              makingOffer.current = true;
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              socket.emit('webrtc:signal', { signal: { sdp: pc.localDescription } });
+              console.log('[WT] Fresh offer sent to recovering peer');
+            } catch (e) {
+              console.error('[WT] Re-offer failed', e);
+            } finally {
+              makingOffer.current = false;
+            }
+          }
+          return;
+        }
 
         // SDP offer or answer ────────────────────────────────────────────────
         if (signal.sdp) {
@@ -291,6 +313,16 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
       }
     };
 
+    // ── Socket reconnect: re-init WebRTC after network recovery ───────────
+    // socket.io reconnects the SAME socket object (same reference), so the
+    // useEffect deps don't change. We must handle 'reconnect' explicitly.
+    const handleReconnect = () => {
+      if (!activeRef.current) return;
+      console.log('[WT] Socket reconnected — rebuilding peer connection');
+      initPeerConnection(socket);
+    };
+    socket.io.on('reconnect', handleReconnect);
+
     // Re-announce every 8 s while not yet connected (handles late-joiners)
     const keepAlive = setInterval(() => {
       if (pcRef.current?.connectionState !== 'connected') {
@@ -301,16 +333,18 @@ export function useWebRTC({ socket, teamId: _teamId, role, enabled }: UseWebRTCO
     socket.on('webrtc:signal', handleSignal);
 
     return () => {
+      activeRef.current = false;
       clearInterval(keepAlive);
       if (reconnTimer.current) clearTimeout(reconnTimer.current);
       socket.off('webrtc:signal', handleSignal);
+      socket.io.off('reconnect', handleReconnect);
       pcRef.current?.close();
       pcRef.current = null;
       localStream.current?.getTracks().forEach(t => t.stop());
       localStream.current = null;
       setPeerConnected(false);
     };
-  }, [enabled, socket, role, isPolite, buildPC, getMicStream, drainIce]);
+  }, [enabled, socket, role, isPolite, buildPC, getMicStream, drainIce, initPeerConnection]);
 
   // ── Incoming PTT status ────────────────────────────────────────────────────
   useEffect(() => {

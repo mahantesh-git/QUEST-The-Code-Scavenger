@@ -2284,6 +2284,142 @@ app.post('/api/admin/a1/report/discord', requireAdmin, route(async (_request: Ad
 }));
 
 
+// ── Main Event: Admin — Excel report ──────────────────────────────────────
+app.get('/api/admin/report/excel', requireAdmin, route(async (_request: AdminAuthedRequest, response) => {
+  const teams = await getTeamsCollection();
+  const docs = await teams.find({}).sort({ 'gameState.round': -1, 'gameState.startTime': 1 }).toArray();
+
+  if (docs.length === 0) {
+    response.status(400).json({ error: 'No teams registered yet' });
+    return;
+  }
+
+  // Build sorted leaderboard: finished teams first (by finishTime asc), then by round desc + startTime asc
+  const sorted = [...docs].sort((a, b) => {
+    const aFinished = a.gameState.stage === 'complete' && a.gameState.finishTime;
+    const bFinished = b.gameState.stage === 'complete' && b.gameState.finishTime;
+    if (aFinished && bFinished) {
+      return new Date(a.gameState.finishTime!).getTime() - new Date(b.gameState.finishTime!).getTime();
+    }
+    if (aFinished) return -1;
+    if (bFinished) return 1;
+    const roundDiff = (b.gameState.round || 0) - (a.gameState.round || 0);
+    if (roundDiff !== 0) return roundDiff;
+    const aStart = a.gameState.startTime ? new Date(a.gameState.startTime).getTime() : Infinity;
+    const bStart = b.gameState.startTime ? new Date(b.gameState.startTime).getTime() : Infinity;
+    return aStart - bStart;
+  });
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'QUEST: The Code Scavenger';
+  const sheet = workbook.addWorksheet('Main Event Leaderboard');
+
+  sheet.columns = [
+    { header: 'Rank', key: 'rank', width: 8 },
+    { header: 'Team Name', key: 'name', width: 22 },
+    { header: 'Solver', key: 'solver', width: 18 },
+    { header: 'Runner', key: 'runner', width: 18 },
+    { header: 'Current Round', key: 'round', width: 14 },
+    { header: 'Rounds Solved', key: 'solved', width: 14 },
+    { header: 'Stage', key: 'stage', width: 14 },
+    { header: 'Score', key: 'score', width: 10 },
+    { header: 'Start Time', key: 'startTime', width: 22 },
+    { header: 'Finish Time', key: 'finishTime', width: 22 },
+  ];
+
+  const headerRow = sheet.getRow(1);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D1117' } };
+  headerRow.alignment = { horizontal: 'center' };
+
+  const fmt = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+  };
+
+  sorted.forEach((team, index) => {
+    const solvedCount = (team.gameState.roundsDone || []).filter(Boolean).length;
+    const isComplete = team.gameState.stage === 'complete';
+    const row = sheet.addRow({
+      rank: index + 1,
+      name: team.name,
+      solver: team.solverName || '—',
+      runner: team.runnerName || '—',
+      round: (team.gameState.round || 0) + 1,
+      solved: solvedCount,
+      stage: team.gameState.stage || '—',
+      score: team.score || 0,
+      startTime: fmt(team.gameState.startTime),
+      finishTime: fmt(team.gameState.finishTime),
+    });
+
+    if (isComplete) {
+      row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3A1A' } };
+      row.getCell('stage').font = { bold: true, color: { argb: 'FF2ECC71' } };
+    }
+    row.getCell('score').font = { bold: true };
+    row.alignment = { horizontal: 'left' };
+  });
+
+  response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  response.setHeader('Content-Disposition', `attachment; filename="main_event_report_${Date.now()}.xlsx"`);
+  await workbook.xlsx.write(response);
+  response.end();
+}));
+
+// ── Main Event: Admin — Discord report ────────────────────────────────────
+app.post('/api/admin/report/discord', requireAdmin, route(async (_request: AdminAuthedRequest, response) => {
+  const teams = await getTeamsCollection();
+  const docs = await teams.find({}).toArray();
+
+  if (docs.length === 0) {
+    response.status(400).json({ error: 'No teams registered yet' });
+    return;
+  }
+
+  const sorted = [...docs].sort((a, b) => {
+    const aFinished = a.gameState.stage === 'complete' && a.gameState.finishTime;
+    const bFinished = b.gameState.stage === 'complete' && b.gameState.finishTime;
+    if (aFinished && bFinished) {
+      return new Date(a.gameState.finishTime!).getTime() - new Date(b.gameState.finishTime!).getTime();
+    }
+    if (aFinished) return -1;
+    if (bFinished) return 1;
+    const roundDiff = (b.gameState.round || 0) - (a.gameState.round || 0);
+    if (roundDiff !== 0) return roundDiff;
+    const aStart = a.gameState.startTime ? new Date(a.gameState.startTime).getTime() : Infinity;
+    const bStart = b.gameState.startTime ? new Date(b.gameState.startTime).getTime() : Infinity;
+    return aStart - bStart;
+  });
+
+  const medals = ['🥇', '🥈', '🥉'];
+  const top = sorted.slice(0, 10);
+
+  const lines = top.map((team, i) => {
+    const medal = medals[i] || `${i + 1}.`;
+    const solvedCount = (team.gameState.roundsDone || []).filter(Boolean).length;
+    const isComplete = team.gameState.stage === 'complete';
+    const status = isComplete ? '✅ FINISHED' : `Round ${(team.gameState.round || 0) + 1} — ${solvedCount} solved`;
+    const score = team.score ? ` | ${team.score.toLocaleString()} pts` : '';
+    return `${medal} **${team.name}** — ${status}${score}`;
+  });
+
+  const totalTeams = sorted.length;
+  const finishedCount = sorted.filter(t => t.gameState.stage === 'complete').length;
+
+  const embed = [
+    '🏆 **QUEST — MAIN EVENT STANDINGS**',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    ...lines,
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    `📊 **${finishedCount}/${totalTeams}** teams finished`,
+    `🕐 ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
+  ].join('\n');
+
+  await sendAdminAlert(embed, undefined, 'main_result');
+  response.json({ ok: true });
+}));
+
 app.use(createApiErrorHandler());
 
 

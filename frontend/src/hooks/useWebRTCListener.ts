@@ -125,22 +125,26 @@ export function useWebRTCListener({ socket, targetTeamId }: UseWebRTCListenerOpt
 
     activeTeam.current = targetTeamId;
 
-    // Build a receive-only peer connection
-    const pc = buildPC(socket, targetTeamId);
+    const initListener = () => {
+      // Build a receive-only peer connection
+      const pc = buildPC(socket, targetTeamId);
 
-    // Add a receive-only audio transceiver so we can receive audio
-    pc.addTransceiver('audio', { direction: 'recvonly' });
+      // Add a receive-only audio transceiver so we can receive audio
+      pc.addTransceiver('audio', { direction: 'recvonly' });
 
-    // Tell server we're listening — server will join us to the team's WebRTC signals
-    socket.emit('webrtc:listen', { teamId: targetTeamId });
+      // Tell server we're listening — server will join us to the team's WebRTC signals
+      socket.emit('webrtc:listen', { teamId: targetTeamId });
 
-    // Announce ourselves to the team so they know to send their offer
-    socket.emit('webrtc:signal', {
-      targetTeamId,
-      signal: { type: 'ready' },
-    });
+      // Announce ourselves to the team so they know to send their offer
+      socket.emit('webrtc:signal', {
+        targetTeamId,
+        signal: { type: 'ready' },
+      });
 
-    console.log(`[Admin WT] Started listening to team ${targetTeamId}`);
+      console.log(`[Admin WT] Started listening to team ${targetTeamId}`);
+    };
+
+    initListener();
 
     // Handle incoming signals from team members
     const handleSignal = async (data: { from: string; signal: any; teamId?: string }) => {
@@ -151,7 +155,14 @@ export function useWebRTCListener({ socket, targetTeamId }: UseWebRTCListenerOpt
       if (!p || p.signalingState === 'closed') return;
 
       const { signal } = data;
-      if (signal.type === 'ready') return;
+      if (signal.type === 'ready') {
+        console.log('[Admin WT] Peer ready — re-announcing');
+        socket.emit('webrtc:signal', {
+          targetTeamId,
+          signal: { type: 'ready' }, 
+        });
+        return;
+      }
 
       try {
         if (signal.sdp) {
@@ -197,9 +208,18 @@ export function useWebRTCListener({ socket, targetTeamId }: UseWebRTCListenerOpt
     socket.on('webrtc:signal', handleSignal);
     socket.on('webrtc:status', handleStatus);
 
+    const handleReconnect = () => {
+      if (activeTeam.current === targetTeamId) {
+        console.log('[Admin WT] Socket reconnected — rebuilding listener');
+        initListener();
+      }
+    };
+    socket.io.on('reconnect', handleReconnect);
+
     return () => {
       socket.off('webrtc:signal', handleSignal);
       socket.off('webrtc:status', handleStatus);
+      socket.io.off('reconnect', handleReconnect);
     };
   }, [socket, targetTeamId, buildPC]);
 
