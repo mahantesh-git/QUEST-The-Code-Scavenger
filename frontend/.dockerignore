@@ -1,0 +1,41 @@
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Dependencies
+**/node_modules
+**/.npm
+**/.pnpm-store
+**/.yarn
+
+# Build output
+**/dist
+**/build
+**/.vite
+**/coverage
+
+# Logs and temp files
+**/*.log
+**/*.tmp
+**/*.temp
+tmp
+temp
+
+# Environment files and local secrets
+.env
+.env.*
+**/.env
+**/.env.*
+backend/google-credentials.json.json
+
+# Scratch and local-only tooling
+scratch
+
+#files and folders that are not needed in the docker image
+**/testing
+**/tests
+**/plans
+

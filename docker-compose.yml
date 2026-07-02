@@ -1,4 +1,3 @@
-version: '3.2'
 services:
     api:
         image: ghcr.io/engineer-man/piston
@@ -6,7 +5,7 @@ services:
         restart: always
         privileged: true
         ports:
-            - "2000:2000"
+            - "127.0.0.1:2000:2000"
         volumes:
             - piston_data:/piston/packages
         tmpfs:
@@ -14,6 +13,41 @@ services:
         environment:
             - PISTON_RUN_TIMEOUT=30000
             - PISTON_COMPILE_TIMEOUT=60000
+        networks:
+            - quest
+    
+    frontend:
+        image: quest-frontend
+        build:
+            context: .
+            dockerfile: ./frontend/Dockerfile 
+        container_name: quest_frontend
+        restart: always
+        ports:
+            - "3000:3000"
+        env_file:
+            - ./frontend/.env
+        networks:
+            - quest
+
+
+    backend:
+        image: quest-backend
+        build:
+            context: .
+            dockerfile: ./backend/Dockerfile 
+        container_name: quest_backend
+        restart: always
+        ports:
+            - "4000:4000"
+        env_file:
+            - ./backend/.env
+        networks:
+            - quest
+
 
 volumes:
     piston_data:
+networks:
+    quest:
+        driver: bridge

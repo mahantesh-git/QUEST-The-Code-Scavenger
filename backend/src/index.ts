@@ -51,7 +51,7 @@ console.log('-----------------------');
 
 const app = express();
 const httpServer = http.createServer(app);
-const port = Number(process.env.PORT || 4000);
+const port = Number(process.env.PORT || 4000);  
 
 // Attach Socket.io to the HTTP server immediately (before any routes)
 initSocketServer(httpServer);

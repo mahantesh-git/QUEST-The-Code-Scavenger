@@ -20,13 +20,17 @@ const getApiBaseUrl = () => {
   if (!h) return '/api';
 
   // Ensure protocol exists and is secure for production
-  const isLocalhost = h.includes('localhost') || h.includes('127.0.0.1');
-  if (!h.startsWith('http') && !h.startsWith('//')) {
-    h = isLocalhost ? `http://${h}` : `https://${h}`;
-  } else if (!isLocalhost && h.startsWith('http://')) {
-    // Force upgrade http to https for production URLs to avoid Mixed Content blocks
-    h = h.replace('http://', 'https://');
-  }
+ const isLocalhost =
+  h.includes('localhost') ||
+  h.includes('127.0.0.1') ||
+  /^(https?:\/\/)?(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(h);
+
+if (!h.startsWith('http') && !h.startsWith('//')) {
+  h = isLocalhost ? `http://${h}` : `https://${h}`;
+} else if (!isLocalhost && h.startsWith('http://')) {
+  // Force upgrade http to https for production URLs to avoid Mixed Content blocks
+  h = h.replace('http://', 'https://');
+}
 
 
 

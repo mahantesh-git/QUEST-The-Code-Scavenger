@@ -213,13 +213,18 @@ function attachRunnerHandlers(socket: Socket, auth: { teamId: string }) {
       });
 
       // 1b. Broadcast to the team room so the solver can track the runner
-      io?.to(`team_${auth.teamId}`).emit('runner:location', {
+      const teamRoom = `team_${auth.teamId}`;
+      io?.to(teamRoom).emit('runner:location', {
         lat,
         lng,
         heading: h,
         accuracy: acc,
         timestamp: data.timestamp ?? Date.now(),
       });
+      // DEBUG: log every ~100th location to avoid spam, just to confirm room name
+      if (Math.random() < 0.05) {
+        console.log(`[Socket] Broadcasting location to admin and ${teamRoom} for team ${auth.teamId}`);
+      }
 
       // 2. Persist to DB throttled (2 s window)
       scheduleDbWrite(lat, lng, h);

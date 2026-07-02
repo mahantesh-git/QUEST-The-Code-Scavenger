@@ -11,8 +11,11 @@ RUN pip3 install qrcode pillow
 # Set working dir to /app so relative paths work correctly
 WORKDIR /app
 
-# Copy the entire repo (backend + event_qr_codes)
-COPY . .
+# Copy only the backend app and its package metadata
+COPY backend/package*.json ./backend/
+COPY backend/tsconfig.json ./backend/
+COPY backend/src ./backend/src
+COPY backend/migrate.js ./backend/
 
 # Install backend dependencies
 WORKDIR /app/backend

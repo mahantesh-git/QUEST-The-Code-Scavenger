@@ -16,15 +16,36 @@ function getSocketUrl(): string {
     return window.location.origin;
   }
 
+  // If the configured backend is on a local network (localhost or LAN IP)
+  // and our browser is loaded over HTTPS (which Vite uses in dev), we MUST 
+  // use window.location.origin so Socket.io connects securely via wss:// 
+  // to the Vite dev server, which then proxies to the backend. 
+  // Otherwise, the browser strictly blocks ws:// on https://.
+  try {
+    const parsed = new URL(h);
+    const isLocalBackend = 
+      parsed.hostname === 'localhost' || 
+      parsed.hostname === '127.0.0.1' || 
+      /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(parsed.hostname);
+
+    if (isLocalBackend && window.location.protocol === 'https:') {
+      return window.location.origin;
+    }
+  } catch (e) {
+    // Ignore invalid URL parsing errors
+  }
+
   // Ensure protocol exists and is secure for production
-  const isLocalhost = h.includes('localhost') || h.includes('127.0.0.1');
+  const isLocalhost =
+    h.includes('localhost') ||
+    h.includes('127.0.0.1') ||
+    /^(https?:\/\/)?(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(h);
+    
   if (!h.startsWith('http') && !h.startsWith('//')) {
     h = isLocalhost ? `http://${h}` : `https://${h}`;
   } else if (!isLocalhost && h.startsWith('http://')) {
     h = h.replace('http://', 'https://');
   }
-
-
 
   // Remove any trailing /api suffix — Socket.io connects at root
   return h.replace(/\/api\/?$/, '').replace(/\/$/, '');

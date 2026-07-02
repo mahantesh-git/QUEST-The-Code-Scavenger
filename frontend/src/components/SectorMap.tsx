@@ -104,7 +104,7 @@ export function SectorMap({ rounds, currentRound, activeQuestion, roundsDone, st
   }, [isFullScreen, mapInstance]);
 
 
-  const isRunnerStage = ['runner_travel', 'runner_game', 'runner_done', 'final_qr'].includes(stage);
+  const isRunnerStage = ['runner_travel', 'runner_entry', 'runner_game', 'runner_done', 'final_qr'].includes(stage);
   // Solver should see the current round even during p1_solve
   const visibleRoundIndex = (isRunnerStage || role === 'solver') ? currentRound : currentRound - 1;
   const current = activeQuestion || (visibleRoundIndex >= 0 ? rounds?.[Math.min(visibleRoundIndex, rounds.length - 1)] : null);
@@ -185,11 +185,16 @@ export function SectorMap({ rounds, currentRound, activeQuestion, roundsDone, st
   useEffect(() => {
     if (role === 'solver') {
       const handleRunnerLocation = (data: any) => {
+        console.log('[SectorMap] Received runner:location from socket:', data);
         setRunnerCoords([data.lat, data.lng, data.accuracy, data.heading]);
         setLastUpdateTime(Date.now());
       };
+      console.log('[SectorMap] Registered runner:location listener on socket:', socket?.id);
       socket?.on('runner:location', handleRunnerLocation);
-      return () => { socket?.off('runner:location', handleRunnerLocation); };
+      return () => { 
+        console.log('[SectorMap] Removing runner:location listener');
+        socket?.off('runner:location', handleRunnerLocation); 
+      };
     }
   }, [socket, role]);
 

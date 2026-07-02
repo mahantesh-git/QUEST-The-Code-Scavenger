@@ -106,7 +106,7 @@ function MapView({ teams, questions, now }: { teams: LeaderboardTeam[], question
     const activeIds = new Set<string>();
 
     teams.forEach((team) => {
-      const runnerStages = ['runner_travel', 'runner_game', 'runner_done'];
+      const runnerStages = ['runner_travel', 'runner_entry', 'runner_game', 'runner_done'];
       const isInField = runnerStages.includes(team.stage);
 
       // Only plot if we have real GPS from the runner's device
